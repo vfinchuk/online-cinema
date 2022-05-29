@@ -10,16 +10,39 @@ import { hash, genSalt, compare } from 'bcryptjs';
 import { UserModel } from 'src/user/user.model';
 import { AuthDto } from './dto/auth.dto';
 import { JwtService } from '@nestjs/jwt';
+import { RefreshTokenDto } from './dto/refreshToken.dto';
 
 @Injectable()
 export class AuthService {
 	constructor(
-		@InjectModel(UserModel) private readonly UserModel: ModelType<UserModel>,
+		@InjectModel(UserModel)
+		private readonly UserModel: ModelType<UserModel>,
 		private readonly jwtService: JwtService
 	) {}
 
 	async login(dto: AuthDto) {
 		const user = await this.validateUser(dto);
+
+		const tokens = await this.issuePairToken(String(user._id));
+
+		return {
+			user: this.getUserFields(user),
+			...tokens,
+		};
+	}
+
+	async getNewTokens({ refreshToken }: RefreshTokenDto) {
+		if (!refreshToken) {
+			throw new UnauthorizedException('Please sign in');
+		}
+
+		const result = await this.jwtService.verifyAsync(refreshToken);
+
+		if (!result) {
+			throw new UnauthorizedException('Invalid token or expired');
+		}
+
+		const user = await this.UserModel.findById(result._id);
 
 		const tokens = await this.issuePairToken(String(user._id));
 
